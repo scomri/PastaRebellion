@@ -1,0 +1,84 @@
+# Load and process raw data
+
+```{r load-retailers-data}
+
+OsherAdPrices <- read_csv("data//raw_data//OsherAdPrices.csv")
+
+ramiLeviPrices <- read_csv("data//raw_data//ramiLeviPrices.csv")
+
+shufersalPrices <- read_csv("data//raw_data//shufersalPrices.csv")
+
+victoryPrices <- read_csv("data//raw_data//victoryPrices.csv")
+
+yenotBitanPrices <- read_csv("data//raw_data//yenotBitanPrices.csv")
+
+YohananofPrices <- read_csv("data//raw_data//YohananofPrices.csv")
+
+```
+
+```{r unq-item-codes}
+
+# Get unique item codes of each retailer
+
+osherad_unq <- unique(OsherAdPrices$ItemCode)
+
+ramilevi_unq <- unique(ramiLeviPrices$ItemCode)
+
+shufersal_unq <- unique(shufersalPrices$ItemCode)
+
+victory_unq <- unique(victoryPrices$ItemCode)
+
+yenotbitan_unq <- unique(yenotBitanPrices$ItemCode)
+
+yohananof_unq <- unique(YohananofPrices$ItemCode)
+
+```
+
+```{r filter-same-items}
+
+# Filter datasets to contain only unique items in all networks
+
+osherad_c <-
+  filter(OsherAdPrices, ItemCode %in% yenotbitan_unq & ItemCode %in% 
+           yohananof_unq & ItemCode %in% shufersal_unq & ItemCode %in% 
+           victory_unq & ItemCode %in% ramilevi_unq)
+
+osherad_c = osherad_c[osherad_c$ItemName !="מקרוני ברילה 500 גרם",]
+
+
+ramilevi_c <- filter(ramiLeviPrices, ItemCode %in% osherad_c$ItemCode)
+
+shufersal_c <- filter(shufersalPrices, ItemCode %in% osherad_c$ItemCode)
+
+victory_c <- filter(victoryPrices, ItemCode %in% osherad_c$ItemCode)
+
+yenotbitan_c <- filter(yenotBitanPrices, ItemCode %in% osherad_c$ItemCode)
+
+yohananof_c <- filter(YohananofPrices, ItemCode %in% osherad_c$ItemCode)
+
+```
+
+```{r fix-victory-date}
+
+victory_c$PriceUpdateDate <- as.POSIXct(victory_c$PriceUpdateDate,
+                                        tz=Sys.timezone())
+```
+
+# Un-comment in order to save processed data
+# Processed data is already in data folder !!!
+
+```{r save-processed-data}
+
+# write_csv(osherad_c,"data//osherad_c.csv")
+# 
+# write_csv(ramilevi_c,"data//ramilevi_c.csv")
+# 
+# write_csv(shufersal_c,"data//shufersal_c.csv")
+# 
+# write_csv(victory_c,"data//victory_c.csv")
+# 
+# write_csv(yenotbitan_c,"data//yenotbitan_c.csv")
+# 
+# write_csv(yohananof_c,"data//yohananof_c.csv")
+
+```

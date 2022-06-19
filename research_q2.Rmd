@@ -1,0 +1,303 @@
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+```{r load-libraries}
+library(tidyverse)
+library(caret)
+library(glmnet)
+library(tidymodels)
+library(MLmetrics)
+library(Metrics)
+```
+
+```{r load-data-stores}
+stores_all <- read_csv("data//raw_data//stores_all.csv")
+```
+
+# get only shufersal stores
+```{r select-shufersal-subchains}
+
+shufersal_stores = stores_all[stores_all$ChainName == "שופרסל",]
+```
+
+# get chains: shely, deal and express
+```{r get-spesific-chains}
+
+shufersal_stores = shufersal_stores[shufersal_stores$SubChainId ==1 | 
+                                      shufersal_stores$SubChainId ==2 | 
+                                      shufersal_stores$SubChainId == 7,]
+```
+
+# assign area to each record
+```{r create-area}
+
+shufersal_stores <- shufersal_stores[,] %>% mutate(area = "")
+
+for(i in 1:nrow(shufersal_stores))
+{
+  city = shufersal_stores[i,"City"]
+  north = c("כרמיאל","טבריה","קצרין","קרית שמונה","חיפה")
+  center = c("תל אביב","תל-אביב","תל אביב-יפו","חולון","רמת גן","פתח-תקוה"
+             ,"ראשון לציון")
+  south = c("אשדוד","באר שבע","אשקלון","דימונה","אילת")
+  if (city %in% north)
+  {
+    shufersal_stores[i,"area"] = "north"
+  }
+  else
+  {
+    if(city %in% center)
+    {
+      shufersal_stores[i,"area"] = "center"
+    }
+    else
+    {
+      if (city %in% south)
+      {
+        shufersal_stores[i,"area"] = "south"
+      }
+      else
+      {
+        shufersal_stores[i,"area"] = "other"
+      }
+    }
+  }
+}
+```
+
+# work only with the columns we need
+```{r subset-columns-stores}
+
+shufersal_stores= shufersal_stores[,c("SubChainId","StoreId","area")]
+```
+
+# assign numeric value to most 3 sub chain with the highest count of stores
+```{r assign-subchain-id}
+
+for(i in 1:nrow(shufersal_stores))
+{
+  id = shufersal_stores[i,"SubChainId"]
+  if (id == 1)
+  {
+    shufersal_stores[i,"SubChainId"] = 1 # shely
+  }
+  else
+  {
+    if(id == 2)
+    {
+      shufersal_stores[i,"SubChainId"] = 2 # deal
+    }
+    else
+    {
+      if (id == 7 )
+      {
+        shufersal_stores[i,"SubChainId"] = 3 # express
+      }
+      else
+      {
+         shufersal_stores[i,"SubChainId"] = 0 
+      }
+    }
+  }
+}
+```
+
+# remove stores that are with other area or 0 chain id
+```{r drop-other-area}
+
+shufersal_stores <- shufersal_stores[shufersal_stores$area != "other",]
+shufersal_stores <- shufersal_stores[shufersal_stores$SubChainId != 0,]
+
+```
+
+```{r load-data-shufersal}
+
+shufersal_prices <- read_csv("data//raw_data//shufersalPrices.csv")
+
+```
+
+# work only with the columns we need
+```{r subset-cols-prices}
+
+shufersal_prices = shufersal_prices[,c("store_id","PriceUpdateDate","ItemCode","ItemPrice")]
+```
+
+# join the items df with the stores df 
+```{r join-prices-stores}
+
+df_items_stores = merge(x=shufersal_prices ,y=shufersal_stores, by.x = "store_id", by.y = "StoreId")
+```
+
+# work only with the columns we need
+```{r subset-cols-after-join}
+
+df_items_stores = df_items_stores[,c("PriceUpdateDate","ItemCode","ItemPrice","area","SubChainId")]
+```
+
+# convert numeric values to the chain(string)
+```{r convert-subchainid-char}
+
+df_items_stores <- df_items_stores %>% 
+  mutate(SubChainId= case_when(
+    SubChainId == 1 ~ "shely",
+    SubChainId == 2 ~ "deal",
+    SubChainId == 3 ~ "express"))
+```
+
+
+```{r items-stores-groupby}
+
+df_items_stores = df_items_stores %>% 
+  group_by(ItemCode,area,SubChainId,PriceUpdateDate) %>%
+  filter(n() > 1)
+```
+
+
+# calculate the price delta
+```{r groupby-price-delta}
+
+df_items_stores = df_items_stores %>% group_by(ItemCode,area,SubChainId) %>%
+    slice(which.max(PriceUpdateDate),
+          which.min(PriceUpdateDate)) %>% 
+            dplyr::summarise(last_price=first(ItemPrice),
+                      last_update=first(PriceUpdateDate), 
+              first_price = last(ItemPrice),      
+              first_update=last(PriceUpdateDate))
+
+```
+
+```{r calc-price-delta}
+
+df_items_stores$price_delta <- 
+  df_items_stores$last_price - df_items_stores$first_price
+```
+
+# create dummy variables -> Prevent "Dummy Variables Trap" 
+```{r create-dummy-vars}
+
+df_items_stores$area_south = ifelse(df_items_stores$area == "south",1,0)
+
+#df_items_stores$area_center = ifelse(df_items_stores$area == "center",1,0)
+df_items_stores$area_north = ifelse(df_items_stores$area == "north",1,0)
+
+df_items_stores$chain_shely = ifelse(df_items_stores$SubChainId == "shely",1,0)
+
+df_items_stores$chain_deal = ifelse(df_items_stores$SubChainId == "deal",1,0)
+
+```
+
+```{r subset-cols-after-dummy}
+
+df_items_stores = df_items_stores %>%
+  select(-c("first_price","area","SubChainId","last_update","first_update"))
+```
+
+# get min max for the normalization 
+```{r itemcode-min-max}
+
+original_code_min = min(df_items_stores$ItemCode)
+
+original_code_max = max(df_items_stores$ItemCode)
+```
+
+# normalize item code
+```{r normalize-item-code}
+
+df_items_stores <- df_items_stores %>%
+  mutate(item_code_norm = 
+           ((ItemCode-original_code_min)/(original_code_max-original_code_min)))
+```
+
+```{r pricedelta-min-max}
+
+original_delta_min = min(df_items_stores$price_delta)
+
+original_delta_max = max(df_items_stores$price_delta)
+```
+
+```{r normalize-price-delta}
+
+df_items_stores = df_items_stores %>%
+  mutate(delta_norm = 
+           ((price_delta-original_delta_min)/(original_delta_max-original_delta_min)))
+```
+
+# remove non relevnt column
+```{r subset-not-norm-itemcode}
+
+df_items_stores = df_items_stores %>% select(-ItemCode)
+```
+
+
+# split to train and test
+```{r train-test-split}
+
+set.seed(222)
+
+index=sample(2,nrow(df_items_stores), replace = TRUE, prob = c(0.7,0.3))
+
+train_data = df_items_stores[index == 1,]
+
+test_data = df_items_stores[index == 2,]
+```
+
+
+# build multi linear regression model
+```{r multi-lm-model}
+
+model <- lm(
+   last_price ~ price_delta  + area_south + area_north + chain_deal + chain_shely,
+   data = train_data)
+
+summary(model)
+```
+
+```{r model-coef}
+
+summary(model)$coef
+```
+
+
+```{r model-stats}
+
+predictions = predict(model,test_data)
+
+rmse = RMSE(predictions,test_data$last_price)
+
+mse = mse(predictions,test_data$last_price) ################# ERROR
+
+r2 = R2(predictions,test_data$last_price)
+```
+
+
+```{r normalize-rmse}
+
+max_price = max(train_data$last_price)  
+
+min_price = min(train_data$last_price)  
+
+rmse_normalized = rmse/(max_price-min_price)
+
+rmse_normalized  # 0.02641027
+```
+
+```{r count-price-delta-train}
+
+cnt_positive = train_data[train_data$price_delta > 0,]
+
+cnt_negative = train_data[train_data$price_delta < 0,]
+
+cnt_zero = train_data[train_data$price_delta == 0,]
+```
+
+```{r model-anova}
+
+anova(model)
+```
+
+```{r model-plot}
+
+plot(model)
+```
+

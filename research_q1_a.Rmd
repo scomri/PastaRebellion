@@ -1,0 +1,288 @@
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+```{r load-libraries}
+library(tidyverse)
+library(data.table)
+library(rsample)
+library(cluster)
+```
+
+```{r seed}
+set.seed(12)
+```
+
+```{r load-data}
+
+osherad_c <- read_csv("data//osherad_c.csv")
+
+ramilevi_c <- read_csv("data//ramilevi_c.csv")
+
+shufersal_c <- read_csv("data//shufersal_c.csv")
+
+victory_c <- read_csv("data//victory_c.csv")
+
+yenotbitan_c <- read_csv("data//yenotbitan_c.csv")
+
+yohananof_c <- read_csv("data//yohananof_c.csv")
+
+```
+
+```{r create-pricedelta-tables}
+
+osherad_updates <-
+  group_by(osherad_c, ItemCode) %>%
+  slice(which.max(PriceUpdateDate), which.min(PriceUpdateDate)) %>%
+  arrange(ItemCode, desc(PriceUpdateDate)) %>%
+  summarise(last_price = first(ItemPrice), last_update=first(PriceUpdateDate), 
+            first_price = last(ItemPrice), first_update=last(PriceUpdateDate))
+
+osherad_updates$price_delta <- osherad_updates$last_price - osherad_updates$first_price
+
+
+
+ramilevi_updates <-
+  group_by(ramilevi_c, ItemCode) %>%
+  slice(which.max(PriceUpdateDate), which.min(PriceUpdateDate)) %>%
+  arrange(ItemCode, desc(PriceUpdateDate)) %>%
+  summarise(last_price = first(ItemPrice), last_update=first(PriceUpdateDate), 
+            first_price = last(ItemPrice), first_update=last(PriceUpdateDate))
+
+ramilevi_updates$price_delta <- ramilevi_updates$last_price - ramilevi_updates$first_price
+
+
+
+shufersal_updates <-
+  group_by(shufersal_c, ItemCode) %>%
+  slice(which.max(PriceUpdateDate), which.min(PriceUpdateDate)) %>%
+  arrange(ItemCode, desc(PriceUpdateDate)) %>%
+  summarise(last_price = first(ItemPrice), last_update=first(PriceUpdateDate), 
+            first_price = last(ItemPrice), first_update=last(PriceUpdateDate))
+
+shufersal_updates$price_delta <- shufersal_updates$last_price - shufersal_updates$first_price
+
+
+
+victory_updates <-
+  group_by(victory_c, ItemCode) %>%
+  slice(which.max(PriceUpdateDate), which.min(PriceUpdateDate)) %>%
+  arrange(ItemCode, desc(PriceUpdateDate)) %>%
+  summarise(last_price = first(ItemPrice), last_update=first(PriceUpdateDate), 
+            first_price = last(ItemPrice), first_update=last(PriceUpdateDate))
+
+victory_updates$price_delta <- victory_updates$last_price - victory_updates$first_price
+
+
+
+yenotbitan_updates <-
+  group_by(yenotbitan_c, ItemCode) %>%
+  slice(which.max(PriceUpdateDate), which.min(PriceUpdateDate)) %>%
+  arrange(ItemCode, desc(PriceUpdateDate)) %>%
+  summarise(last_price = first(ItemPrice), last_update=first(PriceUpdateDate), 
+            first_price = last(ItemPrice), first_update=last(PriceUpdateDate))
+
+yenotbitan_updates$price_delta <- yenotbitan_updates$last_price - yenotbitan_updates$first_price
+
+
+
+yohananof_updates <-
+  group_by(yohananof_c, ItemCode) %>%
+  slice(which.max(PriceUpdateDate), which.min(PriceUpdateDate)) %>%
+  arrange(ItemCode, desc(PriceUpdateDate)) %>%
+  summarise(last_price = first(ItemPrice), last_update=first(PriceUpdateDate), 
+            first_price = last(ItemPrice), first_update=last(PriceUpdateDate))
+
+yohananof_updates$price_delta <- yohananof_updates$last_price - yohananof_updates$first_price
+```
+
+```{r make-itemcodes-visible}
+
+osherad_updates$ItemCode <- format(osherad_updates$ItemCode, scientific=F)
+
+ramilevi_updates$ItemCode <- format(ramilevi_updates$ItemCode, scientific=F)
+
+shufersal_updates$ItemCode <- format(shufersal_updates$ItemCode, scientific=F)
+
+victory_updates$ItemCode <- format(victory_updates$ItemCode, scientific=F)
+
+yenotbitan_updates$ItemCode <- format(yenotbitan_updates$ItemCode, scientific=F)
+
+yohananof_updates$ItemCode <- format(yohananof_updates$ItemCode, scientific=F)
+```
+
+```{r add-retail-to-pricedelta}
+
+osherad_updates$retail <- "OsherAd"
+
+ramilevi_updates$retail <- "RamiLevi"
+
+shufersal_updates$retail <- "Shufersal"
+
+victory_updates$retail <- "Victory"
+
+yenotbitan_updates$retail <- "YenotBitan"
+
+yohananof_updates$retail <- "Yohananof"
+```
+
+```{r bind-all-pricedelta}
+
+price_delta_all <- rbind(osherad_updates, ramilevi_updates)
+
+price_delta_all <- rbind(price_delta_all, shufersal_updates)
+
+price_delta_all <-  rbind(price_delta_all, victory_updates) 
+
+price_delta_all <-  rbind(price_delta_all, yenotbitan_updates)
+
+price_delta_all <-  rbind(price_delta_all, yohananof_updates)
+```
+
+```{r create-df-for-classify}
+
+df_classfiy = price_delta_all[,c("ItemCode","price_delta","retail")]
+
+df_classfiy_noZero = df_classfiy %>% filter(price_delta != 0.0)
+
+df_classfiy_noZero <- df_classfiy_noZero %>%
+  mutate(retail_id = 
+           case_when(retail == "OsherAd" ~ 1,
+                     retail == "RamiLevi" ~ 2,
+                   retail == "Shufersal" ~ 3,
+                   retail == "Victory" ~ 4,
+                   retail == "YenotBitan" ~ 5,
+                   retail == "Yohananof" ~ 6))
+
+df_classfiy_noZero = df_classfiy_noZero %>% select(-retail)
+
+df_classfiy_noZero$ItemCode = as.numeric(df_classfiy_noZero$ItemCode)
+```
+
+```{r normalize-item-code}
+
+original_min = min(df_classfiy_noZero$ItemCode)
+original_max = max(df_classfiy_noZero$ItemCode)
+
+df_classfiy_norm <- df_classfiy_noZero %>%
+  mutate(item_code_norm = ((ItemCode-min(ItemCode))/(max(ItemCode)-min(ItemCode))))
+
+df_classfiy_norm = df_classfiy_norm %>% select(-ItemCode)
+```
+
+```{r kmeans}
+kmeans_classifier = kmeans(df_classfiy_norm, centers = 4, 
+                           iter.max = 10, nstart = 1,
+                           algorithm = c("Hartigan-Wong", "Lloyd", "Forgy",
+                                         "MacQueen"), trace=FALSE)
+```
+
+```{r print-results}
+kmeans_results <- print(kmeans_classifier)
+```
+
+# F-test - difference between clusters
+```{r f-test-diff-clusters}
+
+SSB = kmeans_classifier$betweenss
+SSW = kmeans_classifier$tot.withinss
+k = 4
+DF_SSB = k-1
+N = as.numeric(nrow(df_classfiy_norm))
+DF_SSW = N-3
+MSSB = SSB / DF_SSB
+MSSW = SSW / DF_SSW
+Fst = MSSB/MSSW
+Fcr = qf(p=.01,df1=DF_SSB,df2=DF_SSW,lower.tail = FALSE)
+print(Fst>Fcr)
+```
+
+# Silhouette analysis
+# https://campus.datacamp.com/courses/cluster-analysis-in-r/k-means-clustering?ex=8
+```{r silhouette-analysis}
+
+pam_classifier <- pam(df_classfiy_norm, k=4)
+
+pam_classifier$silinfo$avg.width
+
+```
+
+
+```{r run-kmeans-experiments}
+
+kmeans_exp_results <- data.frame(price_delta1=NA, size1=NA,
+                                 price_delta2=NA, size2=NA,
+                                 price_delta3=NA, size3=NA,
+                                 price_delta4=NA, size4=NA)
+
+for (i in 1:10) {
+  kmeans_classifier_exp = kmeans(df_classfiy_norm, centers = 4, 
+                           iter.max = 10, nstart = 1,
+                           algorithm = c("Hartigan-Wong", "Lloyd", "Forgy",
+                                         "MacQueen"), trace=FALSE)
+  
+  curr_exp_results <- data.frame(kmeans_classifier_exp$centers)
+  curr_exp_results$size <- kmeans_classifier_exp$size
+  curr_exp_results <- curr_exp_results[order(curr_exp_results$price_delta, decreasing = TRUE),]
+  
+  exp_price_delta_centers <- as.data.frame(
+    rbind(
+      c(curr_exp_results$price_delta[1], curr_exp_results$size[1],
+        curr_exp_results$price_delta[2], curr_exp_results$size[2],
+        curr_exp_results$price_delta[3], curr_exp_results$size[3],
+        curr_exp_results$price_delta[4], curr_exp_results$size[4])))
+  colnames(exp_price_delta_centers) <- c("price_delta1","size1",
+                                         "price_delta2","size2",
+                                         "price_delta3","size3",
+                                         "price_delta4","size4")
+  
+  kmeans_exp_results <- rbind(kmeans_exp_results, exp_price_delta_centers)
+}
+
+kmeans_exp_results <- na.omit(kmeans_exp_results)
+```
+
+```{r get-exp-mean}
+kmeans_exp_mean <- summarise_all(kmeans_exp_results, list(mean))
+```
+
+```{r label-kmeans-exp-results}
+
+kmeans_mean_labels <- data.frame(price_delta=NA, size=NA, label=NA)
+
+kmeans_mean_labels <- rbind(kmeans_mean_labels, 
+      c(kmeans_exp_mean$price_delta1,kmeans_exp_mean$size1,"High Increase"),
+      c(kmeans_exp_mean$price_delta2,kmeans_exp_mean$size2,"Low Increase"),
+      c(kmeans_exp_mean$price_delta3,kmeans_exp_mean$size3,"Low Decrease"),
+      c(kmeans_exp_mean$price_delta4,kmeans_exp_mean$size4,"High Decrease"))
+
+kmeans_mean_labels <- na.omit(kmeans_mean_labels)
+
+colnames(kmeans_mean_labels) <- c("cluster_mean_price_delta",
+                                  "cluster_mean_size",
+                                  "label")
+
+kmeans_mean_labels[,1:2] <- sapply(kmeans_mean_labels[,1:2], as.numeric)
+```
+
+```{r kmeans-mean-size-to-percent}
+
+kmeans_mean_labels <- kmeans_mean_labels %>% 
+  mutate(cluster_mean_size_percent = cluster_mean_size / sum(cluster_mean_size))
+```
+
+
+```{r mean-results-labels-percents}
+
+kmeans_mean_labels_percent <- kmeans_mean_labels %>% 
+  mutate(cluster_mean_size_percent = scales::percent(cluster_mean_size_percent)) %>% 
+  select(-c("cluster_mean_size"))
+
+rownames(kmeans_mean_labels_percent) <- c(1,2,3,4)
+
+kmeans_mean_labels_percent
+```
+```{r results-to-csv-for-report}
+#write_csv(kmeans_mean_labels_percent, "kmeans_mean_labels_percent.csv")
+```
+

@@ -1,0 +1,169 @@
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+```{r load-libraries}
+library(tidyverse)
+library(xts)
+library(forecast)
+library(scales)
+#library(ggdist)
+```
+
+```{r load-data}
+
+shufersal_c <- read_csv("data//shufersal_c.csv")
+```
+
+```{r create-shufersal_pasta}
+
+shufersal_pasta <- shufersal_c %>% 
+  filter(Quantity==500 & str_detect(ItemName, "פסטה")) %>% 
+  filter(str_detect(ItemName,"אסם")) %>% 
+  subset(select = -c(filename,upload_date,AllowDiscount))
+```
+
+```{r ymd-vars}
+
+shufersal_pasta <- shufersal_pasta %>% 
+  mutate(year= format(PriceUpdateDate, format="%Y"), 
+         month= format(PriceUpdateDate, format="%m"),
+         day= "01")
+```
+
+```{r new-ymd-col}
+
+shufersal_pasta <- shufersal_pasta %>%
+  mutate(ymd_ts = paste(year, month, day, sep = "-"))
+
+shufersal_pasta$ymd_ts <- as.Date(shufersal_pasta$ymd_ts)
+```
+
+```{r group-by-ymd}
+
+shufersal_pasta_grouped <- shufersal_pasta %>% 
+  group_by(ymd_ts) %>% 
+  summarise(monthly_max_price=max(ItemPrice))
+```
+
+```{r create-time-series}
+
+shufersal_pasta_ts = xts(shufersal_pasta_grouped$monthly_max_price, 
+                         shufersal_pasta_grouped$ymd_ts)
+```
+
+```{r plot-time-series}
+
+autoplot(shufersal_pasta_ts) +
+  labs(title="מחירי הפסטה ברשת שופרסל בשנים 2013-2022", x="שנים", y="מחיר") +
+  geom_line(size=1, color="orange")+
+  scale_x_date(labels = date_format("%Y"), breaks=("year")) +
+  scale_y_continuous(breaks=seq(from=4.9, to=6.5, by=0.1)) +
+  theme(axis.title=element_text(size=14, face= "bold"),
+        axis.text.x = element_text(size=10, face= "bold"),
+        axis.text.y = element_text(size=10, face= "bold"),
+        plot.title = element_text(size=20))
+```
+```{r arima-pasta}
+
+arima_shufersal_pasta = auto.arima(shufersal_pasta_ts)
+```
+
+```{r summary-arima}
+
+print(summary(arima_shufersal_pasta))
+```
+
+```{r checresiduals-arima}
+
+checkresiduals(arima_shufersal_pasta)
+
+mean(arima_shufersal_pasta$residuals)
+```
+
+```{r forecast-arima}
+
+forecast_shufersal_pasta = forecast(arima_shufersal_pasta,h=3)
+
+df_forecast_results = print(forecast_shufersal_pasta)
+```
+
+```{r extract-forecast-results}
+
+df_point_forecast <- df_forecast_results %>% 
+  mutate(ymd_ts = c(as.Date("2022-04-01"), as.Date("2022-05-01"),
+                 as.Date("2022-06-01"))) %>% 
+  select(c("ymd_ts", "Point Forecast")) %>% 
+  rename(monthly_max_price = `Point Forecast`)
+
+# add 3 forecast points to the data
+data_and_forecast <- shufersal_pasta_grouped %>% 
+  rbind(df_point_forecast)
+```
+
+```{r plot-date-breaks}
+plot_date_breaks = c(as.Date("2013-01-01"),
+                     as.Date("2013-12-01"),
+                     as.Date("2014-07-01"),
+                     as.Date("2015-02-01"),
+                     as.Date("2015-09-01"),
+                     as.Date("2016-08-01"),
+                     as.Date("2017-07-01"),
+                     as.Date("2018-02-01"),
+                     as.Date("2019-06-01"),
+                     as.Date("2021-06-01"),
+                     as.Date("2022-03-01")
+                     )
+
+```
+
+```{r ggplot-data-and-forecast}
+
+ggplot(data_and_forecast, mapping = aes(x=ymd_ts, y=monthly_max_price)) +
+  geom_line(size=0.8, colour="blue") +
+  scale_y_continuous(breaks = seq(4.9, 6.5, 0.1)) +
+  scale_x_date(date_labels = "%Y-%m", 
+               breaks = plot_date_breaks) +
+  theme(title = element_text(size=20, face="bold"),
+    axis.text.x= element_text(angle=60, hjust=1, size=12),
+    axis.text.y= element_text(size=10)) +
+  geom_point(data = df_point_forecast, mapping = aes(x=ymd_ts, y=monthly_max_price),
+             colour = "red") +
+  labs(title="מחיר פסטה ברשת שופרסל - כולל חיזוי", x="תקופת זמן", y="מחיר") 
+```
+
+```{r data-mostly-forecast}
+
+df_mostly_forecast <- data_and_forecast %>% 
+  filter(ymd_ts >= "2019-06-01")
+
+mostly_forecast_breaks <- c(as.Date("2019-06-01"),
+                     as.Date("2021-06-01"),
+                     as.Date("2021-07-01"),
+                     as.Date("2022-01-01"),
+                     as.Date("2022-02-01"),
+                     as.Date("2022-03-01"))
+
+```
+
+
+```{r ggplot-mostly-forecast}
+
+ggplot(df_mostly_forecast, mapping = aes(x=ymd_ts, y=monthly_max_price)) +
+  geom_line(size=0.8, colour="blue4") +
+  scale_y_continuous(breaks = seq(4.9, 6.5, 0.1)) +
+  scale_x_date(date_labels = "%Y-%m", 
+               breaks = mostly_forecast_breaks) +
+  theme(title = element_text(size=20, face="bold"),
+    axis.text.x= element_text(angle=60, hjust=1, size=12),
+    axis.text.y= element_text(size=10)) +
+  geom_point(data = df_point_forecast, mapping = aes(x=ymd_ts, y=monthly_max_price),
+             colour = "red") +
+  geom_text(data = df_point_forecast, mapping = 
+              aes(label= format(round(monthly_max_price, 2), nsmall=2)),
+            vjust=c(-0.5), hjust=c(-0.087), colour="red3", fontface="bold") +
+  labs(title="ARIMA model
+     לחיזוי מחיר פסטה ברשת שופרסל",
+       x="תקופת זמן", y="₪ מחיר")
+```
+
