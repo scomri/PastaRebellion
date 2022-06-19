@@ -6,7 +6,7 @@ Team AN - Omri Sgan-cohen & Shahar Ben-Ishay
 
 --
 
-# DOWNLOAD THE DATA FROM GOOGLE DRIVE LINK INTO THIS FOLDER IN ORDER TO RUN THE PROJECT ON THE DATA
+# DOWNLOAD THE DATA FROM GOOGLE DRIVE LINK INTO THE DATA FOLDER IN ORDER TO RUN THE PROJECT WITH THE DATA
 
 This data folder contains 6 processed data sets.
 The data preprocessing is available in the code repository, in the "data_preprocessing" RMD file. 
