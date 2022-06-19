@@ -2,9 +2,11 @@
 ================
 Team AN - Omri Sgan-cohen & Shahar Ben-Ishay
 
-# This Markdown file describes the data folder structure and organization ...
+## This Markdown file describes the data folder structure and organization ...
 
 --
+
+# DOWNLOAD THE DATA FROM GOOGLE DRIVE LINK INTO THIS FOLDER IN ORDER TO RUN THE PROJECT ON THE DATA
 
 This data folder contains 6 processed data sets.
 The data preprocessing is available in the code repository, in the "data_preprocessing" RMD file. 
